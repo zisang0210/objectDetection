@@ -19,8 +19,8 @@ Example usage:
     python object_detection/dataset_tools/create_data.py \
         --label_map_path=./data/labels_items.txt \ 
         --data_dir=./data \
-        --set=train \
-        --output_path=./data/pet
+        --output_path=./data/pet \
+        --validation_set_size=20
 """
 from __future__ import absolute_import
 from __future__ import division
