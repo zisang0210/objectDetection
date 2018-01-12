@@ -17,9 +17,9 @@
 
 Example usage:
     python object_detection/dataset_tools/create_data.py \
-        --label_map_path=./data/labels_items.txt \ 
-        --data_dir=./data \
-        --output_path=./data/pet \
+        --label_map_path=/home/zisang/data/labels_items.txt \ 
+        --data_dir=/home/zisang/data \
+        --output_path=/home/zisang/objDetect/data/pet \
         --validation_set_size=20
 """
 from __future__ import absolute_import
@@ -152,7 +152,7 @@ def main(_):
   validation_set_size=FLAGS.validation_set_size
   image_dir = os.path.join(data_dir, 'images')
   annotations_dir = os.path.join(data_dir, 'annotations','xmls')
-  
+  print(image_dir)
   images = sorted(tf.gfile.ListDirectory(image_dir))
   for img_name in images:
     img_num = int(img_name.split('.')[0])
