@@ -6,7 +6,7 @@ cd $DIR
 echo current dir is $PWD
 
 # 设置目录，避免module找不到的问题
-export PYTHONPATH=$PYTHONPATH:$DIR:$DIR/slim
+export PYTHONPATH=$PYTHONPATH:$DIR:$DIR/slim:$DIR/object_detection
 
 # 定义各目录
 output_dir=/output  # 训练目录
@@ -26,7 +26,7 @@ rm -rvf $output_dir/*
 # 因为dataset里面的东西是不允许修改的，所以这里要把config文件复制一份到输出目录
 cp $dataset_dir/$config $pipeline_config_path
 
-for i in {0..4}  # for循环中的代码执行5此，这里的左右边界都包含，也就是一共训练500个step，每100step验证一次
+for i in {0..0}  # for循环中的代码执行5此，这里的左右边界都包含，也就是一共训练500个step，每100step验证一次
 do
     echo "############" $i "runnning #################"
     last=$[$i*100]
