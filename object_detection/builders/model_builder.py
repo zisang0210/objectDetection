@@ -27,6 +27,7 @@ from object_detection.core import box_predictor
 from object_detection.meta_architectures import faster_rcnn_meta_arch
 from object_detection.meta_architectures import rfcn_meta_arch
 from object_detection.meta_architectures import ssd_meta_arch
+from object_detection.meta_architectures import yolo_meta_arch
 from object_detection.models import faster_rcnn_inception_resnet_v2_feature_extractor as frcnn_inc_res
 from object_detection.models import faster_rcnn_inception_v2_feature_extractor as frcnn_inc_v2
 from object_detection.models import faster_rcnn_nas_feature_extractor as frcnn_nas
@@ -35,6 +36,7 @@ from object_detection.models.embedded_ssd_mobilenet_v1_feature_extractor import 
 from object_detection.models.ssd_inception_v2_feature_extractor import SSDInceptionV2FeatureExtractor
 from object_detection.models.ssd_inception_v3_feature_extractor import SSDInceptionV3FeatureExtractor
 from object_detection.models.ssd_mobilenet_v1_feature_extractor import SSDMobileNetV1FeatureExtractor
+from object_detection.models.yolo_googlenet_feature_extractor import YOLOGoogLeNetFeatureExtractor
 from object_detection.protos import model_pb2
 
 # A map of names to SSD feature extractors.
@@ -44,7 +46,10 @@ SSD_FEATURE_EXTRACTOR_CLASS_MAP = {
     'ssd_mobilenet_v1': SSDMobileNetV1FeatureExtractor,
     'embedded_ssd_mobilenet_v1': EmbeddedSSDMobileNetV1FeatureExtractor,
 }
-
+# A map of names to YOLO feature extractors.
+YOLO_FEATURE_EXTRACTOR_CLASS_MAP = {
+    'yolo_googlenet': YOLOGoogLeNetFeatureExtractor,
+}
 # A map of names to Faster R-CNN feature extractors.
 FASTER_RCNN_FEATURE_EXTRACTOR_CLASS_MAP = {
     'faster_rcnn_nas':
@@ -81,6 +86,8 @@ def build(model_config, is_training):
   meta_architecture = model_config.WhichOneof('model')
   if meta_architecture == 'ssd':
     return _build_ssd_model(model_config.ssd, is_training)
+  if meta_architecture == 'yolo':
+    return _build_yolo_model(model_config.yolo, is_training)
   if meta_architecture == 'faster_rcnn':
     return _build_faster_rcnn_model(model_config.faster_rcnn, is_training)
   raise ValueError('Unknown meta architecture: {}'.format(meta_architecture))
@@ -173,6 +180,92 @@ def _build_ssd_model(ssd_config, is_training):
       normalize_loss_by_num_matches,
       hard_example_miner)
 
+def _build_yolo_feature_extractor(feature_extractor_config, is_training,
+                                 reuse_weights=None):
+  """Builds a yolo_meta_arch.YOLOFeatureExtractor based on config.
+
+  Args:
+    feature_extractor_config: A YOLOFeatureExtractor proto config from ssd.proto.
+    is_training: True if this feature extractor is being built for training.
+    reuse_weights: if the feature extractor should reuse weights.
+
+  Returns:
+    ssd_meta_arch.YOLOFeatureExtractor based on config.
+
+  Raises:
+    ValueError: On invalid feature extractor type.
+  """
+  feature_type = feature_extractor_config.type
+  depth_multiplier = feature_extractor_config.depth_multiplier
+  min_depth = feature_extractor_config.min_depth
+  pad_to_multiple = feature_extractor_config.pad_to_multiple
+  batch_norm_trainable = feature_extractor_config.batch_norm_trainable
+  conv_hyperparams = hyperparams_builder.build(
+      feature_extractor_config.conv_hyperparams, is_training)
+
+  if feature_type not in YOLO_FEATURE_EXTRACTOR_CLASS_MAP:
+    raise ValueError('Unknown ssd feature_extractor: {}'.format(feature_type))
+
+  feature_extractor_class = YOLO_FEATURE_EXTRACTOR_CLASS_MAP[feature_type]
+  return feature_extractor_class(is_training, depth_multiplier, min_depth,
+                                 pad_to_multiple, conv_hyperparams,
+                                 batch_norm_trainable, reuse_weights)
+
+
+def _build_yolo_model(yolo_config, is_training):
+  """Builds an YOLO detection model based on the model config.
+
+  Args:
+    yolo_config: A yolo.proto object containing the config for the desired
+      YOLOMetaArch.
+    is_training: True if this model is being built for training purposes.
+
+  Returns:
+    YOLOMetaArch based on the config.
+  Raises:
+    ValueError: If yolo_config.type is not recognized (i.e. not registered in
+      model_class_map).
+  """
+  num_classes = yolo_config.num_classes
+
+  # Feature extractor
+  feature_extractor = _build_yolo_feature_extractor(yolo_config.feature_extractor,
+                                                   is_training)
+  
+  box_coder = box_coder_builder.build(yolo_config.box_coder)
+  matcher = matcher_builder.build(yolo_config.matcher)
+  region_similarity_calculator = sim_calc.build(
+      yolo_config.similarity_calculator)
+  yolo_box_predictor = box_predictor_builder.build(hyperparams_builder.build,
+                                                  yolo_config.box_predictor,
+                                                  is_training, num_classes)
+  anchor_generator = anchor_generator_builder.build(
+      yolo_config.anchor_generator)
+  image_resizer_fn = image_resizer_builder.build(yolo_config.image_resizer)
+  non_max_suppression_fn, score_conversion_fn = post_processing_builder.build(
+      yolo_config.post_processing)
+  (classification_loss, localization_loss, classification_weight,
+   localization_weight,
+   hard_example_miner) = losses_builder.build(yolo_config.loss)
+  normalize_loss_by_num_matches = yolo_config.normalize_loss_by_num_matches
+
+  return yolo_meta_arch.YOLOMetaArch(
+      is_training,
+      anchor_generator,
+      yolo_box_predictor,
+      box_coder,
+      feature_extractor,
+      matcher,
+      region_similarity_calculator,
+      image_resizer_fn,
+      non_max_suppression_fn,
+      score_conversion_fn,
+      classification_loss,
+      localization_loss,
+      classification_weight,
+      localization_weight,
+      normalize_loss_by_num_matches,
+      hard_example_miner)
 
 def _build_faster_rcnn_feature_extractor(
     feature_extractor_config, is_training, reuse_weights=None):
